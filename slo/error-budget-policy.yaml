@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: error-budget-policy
+  namespace: monitoring
+  labels:
+    app: slo-monitoring
+data:
+  policy.yaml: |
+    # Error Budget Policy
+    # Defines how error budgets are consumed and when to take action
+    
+    error_budget_policy:
+      service: app
+      
+      # Error Budget Calculation
+      calculation:
+        method: time_based  # or request_based
+        window: 30d         # Rolling 30-day window
+        refresh_interval: 5m  # Recalculate every 5 minutes
+      
+      # Budget Allocation
+      allocation:
+        total_budget: 0.001  # 0.1% of total time/requests
+        per_incident_max: 0.0001  # Max 0.01% per incident
+        daily_burn_rate_limit: 0.000033  # ~0.0033% per day
+      
+      # Alert Thresholds
+      alerting:
+        # Warning when 50% of budget consumed
+        warning_threshold: 0.50
+        warning_severity: warning
+        
+        # Critical when 80% of budget consumed
+        critical_threshold: 0.80
+        critical_severity: critical
+        
+        # Emergency when 95% of budget consumed
+        emergency_threshold: 0.95
+        emergency_severity: critical
+        
+        # Alert channels
+        channels:
+          - type: slack
+            webhook: ${SLACK_WEBHOOK_URL}
+          - type: pagerduty
+            service_key: ${PAGERDUTY_SERVICE_KEY}
+          - type: email
+            recipients:
+              - oncall@example.com
+              - sre-team@example.com
+      
+      # Actions on Budget Consumption
+      actions:
+        # At 50% consumption
+        at_50_percent:
+          - action: notify
+            channels: [slack, email]
+          - action: review
+            team: sre-team
+        
+        # At 80% consumption
+        at_80_percent:
+          - action: notify
+            channels: [slack, pagerduty, email]
+          - action: freeze_deployments
+            duration: 24h
+          - action: review
+            team: sre-team
+            priority: high
+        
+        # At 95% consumption
+        at_95_percent:
+          - action: notify
+            channels: [slack, pagerduty, email]
+          - action: freeze_deployments
+            duration: 72h
+          - action: emergency_review
+            team: sre-team
+            priority: critical
+          - action: escalate
+            to: engineering-lead
+      
+      # Budget Recovery
+      recovery:
+        # Monitor recovery after incident
+        monitor_duration: 24h
+        recovery_threshold: 0.50  # Consider recovered when below 50%
+        auto_resume_deployments: true

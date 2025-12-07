@@ -18,6 +18,7 @@ resources:
   - virtualservice.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
+  - prometheusrule-slo.yaml
   - analysis-template.yaml
 
 commonLabels:

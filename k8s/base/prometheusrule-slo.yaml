@@ -1,0 +1,164 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-alerts
+  labels:
+    app: app
+    prometheus: kube-prometheus
+    role: slo-alerts
+spec:
+  groups:
+  - name: slo.availability
+    interval: 5m
+    rules:
+    # Availability SLO Alert
+    - alert: AvailabilitySLOBreach
+      expr: |
+        (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[5m]))
+        ) < 0.999
+      for: 5m
+      labels:
+        severity: critical
+        component: slo
+        sli: availability
+      annotations:
+        summary: "Availability SLO breach detected"
+        description: "Availability is {{ $value | humanizePercentage }} (target: 99.9%)"
+        runbook_url: "https://runbooks.example.com/availability-slo"
+    
+    # Error Budget Consumption - Warning
+    - alert: ErrorBudgetWarning
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.50
+      for: 5m
+      labels:
+        severity: warning
+        component: error-budget
+      annotations:
+        summary: "Error budget 50% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+    
+    # Error Budget Consumption - Critical
+    - alert: ErrorBudgetCritical
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.80
+      for: 5m
+      labels:
+        severity: critical
+        component: error-budget
+      annotations:
+        summary: "Error budget 80% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+        action: "Consider freezing deployments"
+    
+    # Error Budget Consumption - Emergency
+    - alert: ErrorBudgetEmergency
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.95
+      for: 5m
+      labels:
+        severity: critical
+        component: error-budget
+      annotations:
+        summary: "Error budget 95% consumed - EMERGENCY"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+        action: "Freeze all deployments immediately"
+  
+  - name: slo.latency
+    interval: 5m
+    rules:
+    # P95 Latency SLO Alert
+    - alert: LatencyP95SLOBreach
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+        ) > 0.500
+      for: 5m
+      labels:
+        severity: warning
+        component: slo
+        sli: latency-p95
+      annotations:
+        summary: "P95 Latency SLO breach"
+        description: "P95 latency is {{ $value }}s (target: 500ms)"
+        runbook_url: "https://runbooks.example.com/latency-slo"
+    
+    # P99 Latency SLO Alert
+    - alert: LatencyP99SLOBreach
+      expr: |
+        histogram_quantile(0.99, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+        ) > 1.000
+      for: 5m
+      labels:
+        severity: warning
+        component: slo
+        sli: latency-p99
+      annotations:
+        summary: "P99 Latency SLO breach"
+        description: "P99 latency is {{ $value }}s (target: 1s)"
+        runbook_url: "https://runbooks.example.com/latency-slo"
+  
+  - name: slo.error-rate
+    interval: 5m
+    rules:
+    # Error Rate SLO Alert
+    - alert: ErrorRateSLOBreach
+      expr: |
+        (
+          sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[5m]))
+        ) > 0.001
+      for: 5m
+      labels:
+        severity: warning
+        component: slo
+        sli: error-rate
+      annotations:
+        summary: "Error Rate SLO breach"
+        description: "Error rate is {{ $value | humanizePercentage }} (target: 0.1%)"
+        runbook_url: "https://runbooks.example.com/error-rate-slo"
+  
+  - name: slo.burn-rate
+    interval: 5m
+    rules:
+    # High Burn Rate Alert
+    - alert: HighErrorBudgetBurnRate
+      expr: |
+        (
+          (1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[6h])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[6h]))
+          )) / 0.001
+        ) > 14.4
+      for: 5m
+      labels:
+        severity: critical
+        component: error-budget
+      annotations:
+        summary: "High error budget burn rate detected"
+        description: "Burn rate: {{ $value }}x normal (threshold: 14.4x)"
+        action: "At this rate, error budget will be exhausted in 5 hours"

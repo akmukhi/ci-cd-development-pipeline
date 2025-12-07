@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sli-slo-definitions
+  namespace: monitoring
+  labels:
+    app: slo-monitoring
+data:
+  definitions.yaml: |
+    # SLI/SLO Definitions for Application
+    # Service Level Indicators (SLIs) and Service Level Objectives (SLOs)
+    
+    services:
+      - name: app
+        description: Main application service
+        slis:
+          # Availability SLI
+          - name: availability
+            description: Percentage of successful requests (2xx, 3xx status codes)
+            type: ratio
+            numerator: |
+              sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m]))
+            denominator: |
+              sum(rate(http_requests_total{service="app"}[5m]))
+            slo:
+              target: 0.999  # 99.9% availability
+              window: 30d    # 30-day rolling window
+              error_budget: 0.001  # 0.1% error budget
+              alert_threshold: 0.95  # Alert at 95% of budget consumed
+            
+          # Latency SLI (P50)
+          - name: latency-p50
+            description: 50th percentile request latency
+            type: latency
+            query: |
+              histogram_quantile(0.50, 
+                sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+              )
+            slo:
+              target: 0.200  # 200ms P50 latency
+              window: 30d
+              error_budget: 0.01  # 1% error budget
+              alert_threshold: 0.90
+            
+          # Latency SLI (P95)
+          - name: latency-p95
+            description: 95th percentile request latency
+            type: latency
+            query: |
+              histogram_quantile(0.95, 
+                sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+              )
+            slo:
+              target: 0.500  # 500ms P95 latency
+              window: 30d
+              error_budget: 0.01  # 1% error budget
+              alert_threshold: 0.90
+            
+          # Latency SLI (P99)
+          - name: latency-p99
+            description: 99th percentile request latency
+            type: latency
+            query: |
+              histogram_quantile(0.99, 
+                sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+              )
+            slo:
+              target: 1.000  # 1s P99 latency
+              window: 30d
+              error_budget: 0.01  # 1% error budget
+              alert_threshold: 0.90
+            
+          # Error Rate SLI
+          - name: error-rate
+            description: Percentage of requests resulting in errors (4xx, 5xx)
+            type: ratio
+            numerator: |
+              sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m]))
+            denominator: |
+              sum(rate(http_requests_total{service="app"}[5m]))
+            slo:
+              target: 0.001  # 0.1% error rate
+              window: 30d
+              error_budget: 0.01  # 1% error budget
+              alert_threshold: 0.90
+            
+          # Throughput SLI
+          - name: throughput
+            description: Requests per second
+            type: rate
+            query: |
+              sum(rate(http_requests_total{service="app"}[5m]))
+            slo:
+              target: 100  # Minimum 100 req/s
+              window: 30d
+              error_budget: 0.05  # 5% error budget
+              alert_threshold: 0.80
