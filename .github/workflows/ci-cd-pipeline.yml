@@ -425,10 +425,14 @@ jobs:
         with:
           category: '/language:javascript,/language:typescript,/language:python'
 
-  # Secrets Scanning Job (Gitleaks)
+  # Secrets Scanning Job (Gitleaks + TruffleHog)
   secrets-scan:
-    name: Secrets Scan (Gitleaks)
+    name: Secrets Scan (Gitleaks + TruffleHog)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -444,16 +448,107 @@ jobs:
           no-git: false
           verbose: true
           redact: true
+          exit-code: 0  # Don't fail on findings, report them
 
-      - name: Upload Gitleaks results
+      - name: Upload Gitleaks results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks-report.sarif
+          category: gitleaks
+          wait-for-processing: false
+
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+          trufflehog --version
+
+      - name: Run TruffleHog
+        run: |
+          trufflehog git \
+            --no-verification \
+            --json \
+            --output trufflehog-results.json \
+            file://. || true
+          
+          # Also generate SARIF format
+          trufflehog git \
+            --no-verification \
+            --json \
+            --output trufflehog-results.sarif \
+            file://. || true
+
+      - name: Upload TruffleHog results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trufflehog-results.sarif
+          category: trufflehog
+          wait-for-processing: false
+
+      - name: Parse and report findings
+        if: always()
+        run: |
+          echo "## Secrets Scan Results 🔒" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check Gitleaks results
+          if [ -f "gitleaks-report.json" ]; then
+            GITLEAKS_FINDINGS=$(jq '. | length' gitleaks-report.json 2>/dev/null || echo "0")
+            echo "**Gitleaks Findings:** $GITLEAKS_FINDINGS" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check TruffleHog results
+          if [ -f "trufflehog-results.json" ]; then
+            TRUFFLEHOG_FINDINGS=$(jq '. | length' trufflehog-results.json 2>/dev/null || echo "0")
+            echo "**TruffleHog Findings:** $TRUFFLEHOG_FINDINGS" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the Security tab." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload secrets scan results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gitleaks-results
+          name: secrets-scan-results
           path: |
             gitleaks-report.json
             gitleaks-report.sarif
+            trufflehog-results.json
+            trufflehog-results.sarif
           if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Fail on critical findings
+        if: always()
+        run: |
+          CRITICAL_FOUND=false
+          
+          # Check Gitleaks for critical findings
+          if [ -f "gitleaks-report.json" ]; then
+            CRITICAL_COUNT=$(jq '[.[] | select(.tags[] | contains("critical") or contains("high"))] | length' gitleaks-report.json 2>/dev/null || echo "0")
+            if [ "$CRITICAL_COUNT" -gt 0 ]; then
+              echo "❌ Gitleaks found $CRITICAL_COUNT critical/high severity secrets"
+              CRITICAL_FOUND=true
+            fi
+          fi
+          
+          # Check TruffleHog for verified secrets
+          if [ -f "trufflehog-results.json" ]; then
+            VERIFIED_COUNT=$(jq '[.[] | select(.Verified == true)] | length' trufflehog-results.json 2>/dev/null || echo "0")
+            if [ "$VERIFIED_COUNT" -gt 0 ]; then
+              echo "❌ TruffleHog found $VERIFIED_COUNT verified secrets"
+              CRITICAL_FOUND=true
+            fi
+          fi
+          
+          if [ "$CRITICAL_FOUND" = "true" ]; then
+            echo "::error::Critical secrets detected. Please review and remove secrets before merging."
+            exit 1
+          fi
+          
+          echo "✅ No critical secrets detected"
 
   # Security Scanning Job (Trivy, OPA, npm audit, Bandit)
   security-scan:

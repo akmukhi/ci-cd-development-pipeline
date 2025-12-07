@@ -1,0 +1,65 @@
+# Gitleaks ignore patterns
+# Patterns to exclude from secrets scanning
+
+# Test files with mock secrets
+**/test/**/*.json
+**/tests/**/*.json
+**/*_test.go
+**/*_test.py
+**/*.test.js
+**/__tests__/**/*
+
+# Documentation examples
+**/docs/**/*.md
+**/examples/**/*
+**/samples/**/*
+
+# Configuration templates
+**/*.template
+**/*.example
+**/*.sample
+**/.env.example
+**/.env.template
+
+# Lock files
+**/package-lock.json
+**/yarn.lock
+**/poetry.lock
+**/Pipfile.lock
+**/go.sum
+
+# Build artifacts
+**/dist/**
+**/build/**
+**/target/**
+**/.next/**
+**/node_modules/**
+
+# IDE and editor files
+**/.idea/**
+**/.vscode/**
+**/.vs/**
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
+
+# Specific known false positives
+**/vendor/**
+**/third_party/**
+
+# CI/CD configuration (may contain masked secrets)
+**/.github/workflows/*.yml
+**/.gitlab-ci.yml
+**/.circleci/config.yml
+
+# Kubernetes secrets (already encrypted/managed)
+**/k8s/**/secret.yaml
+**/k8s/**/sealed-secret.yaml
+
+# Terraform state files
+**/*.tfstate
+**/*.tfstate.*
+
+# Log files
+**/*.log

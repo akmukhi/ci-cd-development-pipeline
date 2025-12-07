@@ -1,0 +1,81 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run: pre-commit run --all-files
+
+repos:
+  # Gitleaks secrets detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Gitleaks - Secrets Detection
+        description: Detect secrets and credentials in code
+        entry: gitleaks
+        language: golang
+        args: ['--no-banner', '--verbose', '--redact']
+        stages: [commit, push]
+        pass_filenames: false
+        always_run: true
+
+  # TruffleHog secrets detection
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.63.0
+    hooks:
+      - id: trufflehog
+        name: TruffleHog - Secrets Detection
+        description: Detect secrets, keys, and credentials
+        entry: trufflehog
+        language: golang
+        args: ['git', '--no-verification', '--fail']
+        stages: [commit, push]
+        pass_filenames: false
+        always_run: true
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        description: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix End of Files
+        description: Ensure files end with newline
+      - id: check-yaml
+        name: Check YAML
+        description: Validate YAML syntax
+        args: ['--unsafe']
+      - id: check-json
+        name: Check JSON
+        description: Validate JSON syntax
+      - id: check-added-large-files
+        name: Check for Large Files
+        description: Prevent committing large files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+        name: Detect Private Keys
+        description: Detect private keys in files
+      - id: check-merge-conflict
+        name: Check for Merge Conflicts
+        description: Detect merge conflict markers
+      - id: check-case-conflict
+        name: Check for Case Conflicts
+        description: Detect case conflicts in filenames
+
+  # YAML formatting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: YAML Lint
+        description: Lint YAML files
+        args: ['-d', '{extends: default, rules: {line-length: {max: 120}}}']
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        description: Lint shell scripts
+        args: ['--severity=warning']

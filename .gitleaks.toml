@@ -1,0 +1,87 @@
+# Gitleaks configuration
+# Custom rules and patterns for secrets detection
+
+title = "Gitleaks Secrets Detection Configuration"
+
+[extend]
+# Use default rules
+useDefault = true
+
+# Path to additional rules file
+path = ""
+
+[allowlist]
+description = "Allowlist for known false positives"
+paths = [
+    '''\.gitleaksignore''',
+    '''\.gitleaks\.toml''',
+    '''\.pre-commit-config\.yaml''',
+    '''\.github/workflows/.*\.yml''',
+    '''\.github/workflows/.*\.yaml''',
+    '''docs/.*''',
+    '''examples/.*''',
+    '''test/.*''',
+    '''tests/.*''',
+    '''__tests__/.*''',
+    '''\.test\.js''',
+    '''\.test\.ts''',
+    '''\.spec\.js''',
+    '''\.spec\.ts''',
+    '''package-lock\.json''',
+    '''yarn\.lock''',
+    '''go\.sum''',
+    '''\.env\.example''',
+    '''\.env\.template''',
+    '''\.env\.sample''',
+]
+
+commits = [
+    # Allow specific commit hashes if needed
+]
+
+regexes = [
+    # Allow specific regex patterns
+    '''example.*key''',
+    '''test.*secret''',
+    '''mock.*token''',
+    '''placeholder.*password''',
+]
+
+stopwords = [
+    # Words that should not trigger alerts
+    "example",
+    "test",
+    "mock",
+    "placeholder",
+    "sample",
+    "dummy",
+]
+
+[allowlist.regexTarget]
+# Target specific regex patterns
+paths = []
+
+# Custom rules for additional secret patterns
+[[rules]]
+id = "custom-aws-access-key"
+description = "Custom AWS Access Key detection"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["aws", "key", "access-key"]
+entropy = 3.5
+secretGroup = 1
+
+[[rules]]
+id = "custom-api-key"
+description = "Custom API Key pattern"
+regex = '''(?i)(api[_-]?key|apikey)\s*[=:]\s*['"]?([a-z0-9]{32,})['"]?'''
+tags = ["api", "key"]
+entropy = 3.0
+secretGroup = 2
+
+[[rules]]
+id = "custom-jwt-token"
+description = "JWT Token detection"
+regex = '''eyJ[A-Za-z0-9-_=]+\.eyJ[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*'''
+tags = ["jwt", "token"]
+entropy = 3.5
+secretGroup = 0

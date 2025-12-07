@@ -1,0 +1,116 @@
+# TruffleHog configuration
+# Secrets detection configuration
+
+# Scan options
+scan:
+  # Scan entire git history
+  scan_history: true
+  
+  # Scan uncommitted changes
+  scan_uncommitted: true
+  
+  # Scan current commit only
+  scan_current: false
+  
+  # Base commit to scan from
+  base: ""
+  
+  # Head commit to scan to
+  head: "HEAD"
+  
+  # Maximum depth for scanning
+  max_depth: 1000
+
+# Detection options
+detection:
+  # Verify secrets (may make external API calls)
+  verify: false
+  
+  # Only verified secrets
+  only_verified: false
+  
+  # Include unverified secrets
+  include_unverified: true
+  
+  # Custom detectors
+  custom_detectors: []
+  
+  # Exclude detectors
+  exclude_detectors: []
+
+# Output options
+output:
+  # Output format: json, text, sarif
+  format: json
+  
+  # Output file path
+  file: ""
+  
+  # Print to stdout
+  stdout: true
+  
+  # Redact secrets in output
+  redact: true
+  
+  # Include metadata
+  include_metadata: true
+
+# Filtering options
+filters:
+  # Include paths (regex)
+  include_paths: []
+  
+  # Exclude paths (regex)
+  exclude_paths:
+    - '\.git/.*'
+    - 'node_modules/.*'
+    - '\.venv/.*'
+    - 'venv/.*'
+    - '\.env\.example'
+    - '\.env\.template'
+    - '\.gitleaksignore'
+    - '\.gitleaks\.toml'
+    - '\.pre-commit-config\.yaml'
+    - 'docs/.*'
+    - 'examples/.*'
+    - 'test/.*'
+    - 'tests/.*'
+    - '__tests__/.*'
+    - '\.test\.js'
+    - '\.test\.ts'
+    - '\.spec\.js'
+    - '\.spec\.ts'
+    - 'package-lock\.json'
+    - 'yarn\.lock'
+    - 'go\.sum'
+  
+  # Minimum entropy
+  min_entropy: 3.0
+  
+  # Maximum entropy
+  max_entropy: 8.0
+
+# Notification options
+notifications:
+  # Send notifications on findings
+  notify: true
+  
+  # Notification channels
+  channels: []
+  
+  # Minimum severity to notify
+  min_severity: "high"
+
+# CI/CD integration
+ci:
+  # Fail on findings
+  fail_on_findings: true
+  
+  # Exit code on findings
+  exit_code: 1
+  
+  # Report findings as comments
+  comment_on_pr: true
+  
+  # Upload SARIF results
+  upload_sarif: true
