@@ -399,7 +399,63 @@ jobs:
           MINIMUM_GREEN: 80
           MINIMUM_ORANGE: 60
 
-  # Security Scanning Job
+  # CodeQL Analysis Job
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript,typescript,python
+          queries: +security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript,/language:typescript,/language:python'
+
+  # Secrets Scanning Job (Gitleaks)
+  secrets-scan:
+    name: Secrets Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for secrets scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-path: .gitleaks.toml
+          no-git: false
+          verbose: true
+          redact: true
+
+      - name: Upload Gitleaks results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results
+          path: |
+            gitleaks-report.json
+            gitleaks-report.sarif
+          if-no-files-found: ignore
+
+  # Security Scanning Job (Trivy, OPA, npm audit, Bandit)
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -407,31 +463,141 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
 
-      - name: Upload Trivy results to GitHub Security
+      - name: Run Trivy repository scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'repo'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-repo-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Run Trivy config scan (IaC)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-config-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Upload Trivy filesystem results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-filesystem'
 
-      - name: Run npm audit (if applicable)
+      - name: Upload Trivy repository results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-repo-results.sarif'
+          category: 'trivy-repository'
+
+      - name: Upload Trivy config results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-config-results.sarif'
+          category: 'trivy-config'
+
+      - name: Run npm audit
         if: hashFiles('package.json') != ''
         run: |
+          npm audit --audit-level=moderate --json > npm-audit-results.json || true
           npm audit --audit-level=moderate || true
 
       - name: Run Bandit security scan (Python)
         if: hashFiles('**/*.py') != ''
         run: |
-          pip install bandit
-          bandit -r . -f json -o bandit-report.json || true
+          pip install bandit[toml]
+          bandit -r . -f json -o bandit-report.json -ll || true
+          bandit -r . -f txt -o bandit-report.txt -ll || true
+
+      - name: Run Safety check (Python dependencies)
+        if: hashFiles('requirements.txt') != '' || hashFiles('requirements-dev.txt') != ''
+        run: |
+          pip install safety
+          if [ -f requirements.txt ]; then
+            safety check --json --file requirements.txt -o safety-report.json || true
+            safety check --file requirements.txt || true
+          fi
+
+      - name: Install OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64
+          chmod +x opa
+          sudo mv opa /usr/local/bin/
+
+      - name: Run OPA policy checks
+        run: |
+          mkdir -p .opa/policies
+          # Check if policies directory exists, if not create sample policy
+          if [ ! -d ".opa/policies" ] || [ -z "$(ls -A .opa/policies 2>/dev/null)" ]; then
+            echo "No OPA policies found. Creating sample policy structure..."
+            mkdir -p .opa/policies
+            cat > .opa/policies/sample.rego << 'EOF'
+          package policies
+
+          import rego.v1
+
+          default allow := false
+
+          allow if {
+            input.resource.type == "deployment"
+            input.resource.spec.replicas <= 10
+          }
+          EOF
+          fi
+          
+          # Evaluate policies if policy files exist
+          if [ -d ".opa/policies" ] && [ -n "$(ls -A .opa/policies/*.rego 2>/dev/null)" ]; then
+            echo "Running OPA policy evaluation..."
+            opa test .opa/policies/ -v || true
+            
+            # Check Kubernetes manifests if they exist
+            if [ -d "k8s" ] || [ -d "kubernetes" ] || [ -f "k8s.yaml" ] || [ -f "kubernetes.yaml" ]; then
+              opa eval --data .opa/policies/ --input k8s.yaml --format json "data.policies" || true
+            fi
+          else
+            echo "No OPA policies to evaluate"
+          fi
+
+      - name: Run OPA Conftest (if conftest policies exist)
+        if: hashFiles('**/policy/*.rego') != '' || hashFiles('**/policies/*.rego') != ''
+        run: |
+          curl -L https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_linux_amd64.tar.gz | tar -xz
+          sudo mv conftest /usr/local/bin/
+          
+          # Test Kubernetes manifests
+          if [ -d "k8s" ]; then
+            conftest test k8s/ --all-namespaces || true
+          fi
+          if [ -d "kubernetes" ]; then
+            conftest test kubernetes/ --all-namespaces || true
+          fi
+          if [ -f "k8s.yaml" ]; then
+            conftest test k8s.yaml --all-namespaces || true
+          fi
+          if [ -f "kubernetes.yaml" ]; then
+            conftest test kubernetes.yaml --all-namespaces || true
+          fi
 
       - name: Upload security scan results
         if: always()
@@ -439,9 +605,109 @@ jobs:
         with:
           name: security-scan-results
           path: |
-            trivy-results.sarif
+            trivy-*-results.sarif
+            npm-audit-results.json
             bandit-report.json
+            bandit-report.txt
+            safety-report.json
+            opa-results.json
           if-no-files-found: ignore
+
+      - name: Generate security summary
+        if: always()
+        run: |
+          echo "## Security Scan Summary 🔒" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "trivy-fs-results.sarif" ]; then
+            echo "✅ Trivy filesystem scan completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "trivy-repo-results.sarif" ]; then
+            echo "✅ Trivy repository scan completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "trivy-config-results.sarif" ]; then
+            echo "✅ Trivy config scan completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "npm-audit-results.json" ]; then
+            echo "✅ npm audit completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "bandit-report.json" ]; then
+            echo "✅ Bandit scan completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "safety-report.json" ]; then
+            echo "✅ Safety check completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the Security tab and artifacts." >> $GITHUB_STEP_SUMMARY
+
+  # Container Image Security Scan (Trivy)
+  container-scan:
+    name: Container Image Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: hashFiles('Dockerfile') != '' && github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_SHA:0:7}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Trivy vulnerability scanner on container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-container-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      - name: Run Trivy vulnerability scanner (table format)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy container scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-container-results.sarif'
+          category: 'trivy-container'
+
+      - name: Upload container scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-scan-results
+          path: trivy-container-results.sarif
+          if-no-files-found: ignore
+
+      - name: Generate container scan summary
+        if: always()
+        run: |
+          echo "## Container Image Security Scan 🐳🔒" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Trivy container scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the Security tab." >> $GITHUB_STEP_SUMMARY
 
   # Code Quality Job
   code-quality:
@@ -488,7 +754,7 @@ jobs:
   docker-build:
     name: Docker Build (Multi-Arch)
     runs-on: ubuntu-latest
-    needs: [build, unit-tests, integration-tests, security-scan]
+    needs: [build, unit-tests, integration-tests, codeql-analysis, secrets-scan, security-scan]
     if: hashFiles('Dockerfile') != ''
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -645,7 +911,7 @@ jobs:
   gitops-deploy:
     name: GitOps Deployment
     runs-on: ubuntu-latest
-    needs: [build, unit-tests, integration-tests, security-scan, docker-build]
+    needs: [build, unit-tests, integration-tests, codeql-analysis, secrets-scan, security-scan, docker-build, container-scan]
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch')
@@ -697,7 +963,7 @@ jobs:
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [build, unit-tests, integration-tests, coverage-report, security-scan, code-quality, docker-build, gitops-deploy]
+    needs: [build, unit-tests, integration-tests, coverage-report, codeql-analysis, secrets-scan, security-scan, container-scan, code-quality, docker-build, gitops-deploy]
     if: always()
     steps:
       - name: Notify on success
