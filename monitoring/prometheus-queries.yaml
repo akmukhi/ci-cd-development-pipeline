@@ -1,0 +1,325 @@
+# Prometheus Metrics Queries
+# Collection of useful Prometheus queries for monitoring
+
+queries:
+  # Application Metrics
+  application:
+    # Request Rate
+    request_rate_total:
+      query: |
+        sum(rate(http_requests_total{service="app"}[5m])) by (service, namespace, environment)
+      description: "Total request rate per service"
+      
+    request_rate_by_method:
+      query: |
+        sum(rate(http_requests_total{service="app"}[5m])) by (method, service)
+      description: "Request rate by HTTP method"
+      
+    request_rate_by_status:
+      query: |
+        sum(rate(http_requests_total{service="app"}[5m])) by (status, service)
+      description: "Request rate by HTTP status code"
+    
+    # Error Rate
+    error_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m]))
+      description: "Error rate percentage"
+      
+    error_rate_4xx:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"4.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m]))
+      description: "4xx error rate"
+      
+    error_rate_5xx:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m]))
+      description: "5xx error rate"
+    
+    # Success Rate
+    success_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m]))
+      description: "Success rate percentage"
+    
+    # Latency Metrics
+    latency_p50:
+      query: |
+        histogram_quantile(0.50, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le, service)
+        )
+      description: "50th percentile latency"
+      
+    latency_p95:
+      query: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le, service)
+        )
+      description: "95th percentile latency"
+      
+    latency_p99:
+      query: |
+        histogram_quantile(0.99, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le, service)
+        )
+      description: "99th percentile latency"
+      
+    latency_p999:
+      query: |
+        histogram_quantile(0.999, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le, service)
+        )
+      description: "99.9th percentile latency"
+    
+    # Throughput
+    throughput:
+      query: |
+        sum(rate(http_requests_total{service="app"}[1m])) by (service)
+      description: "Requests per second"
+    
+    # Active Connections
+    active_connections:
+      query: |
+        sum(http_connections_active{service="app"}) by (service)
+      description: "Active HTTP connections"
+  
+  # SLO Metrics
+  slo:
+    # Availability
+    availability_30d:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[30d]))
+      description: "30-day availability"
+      
+    availability_7d:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[7d])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[7d]))
+      description: "7-day availability"
+      
+    availability_24h:
+      query: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[24h])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[24h]))
+      description: "24-hour availability"
+    
+    # Error Budget Consumption
+    error_budget_consumed:
+      query: |
+        (1 - (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[30d]))
+        )) / 0.001
+      description: "Error budget consumption (30-day)"
+      
+    error_budget_remaining:
+      query: |
+        1 - ((1 - (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[30d]))
+        )) / 0.001)
+      description: "Error budget remaining (30-day)"
+    
+    # Burn Rate
+    burn_rate_6h:
+      query: |
+        (1 - (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[6h])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[6h]))
+        )) / 0.001
+      description: "6-hour error budget burn rate"
+      
+    burn_rate_1h:
+      query: |
+        (1 - (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[1h])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[1h]))
+        )) / 0.001
+      description: "1-hour error budget burn rate"
+  
+  # Resource Metrics
+  resources:
+    # CPU Usage
+    cpu_usage_percentage:
+      query: |
+        sum(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) by (pod, namespace) * 100
+      description: "CPU usage percentage per pod"
+      
+    cpu_usage_avg:
+      query: |
+        avg(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) * 100
+      description: "Average CPU usage across all pods"
+      
+    cpu_requests_utilization:
+      query: |
+        sum(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) 
+        / 
+        sum(kube_pod_container_resource_requests{pod=~"app-.*",resource="cpu"}) * 100
+      description: "CPU requests utilization"
+      
+    cpu_limits_utilization:
+      query: |
+        sum(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) 
+        / 
+        sum(kube_pod_container_resource_limits{pod=~"app-.*",resource="cpu"}) * 100
+      description: "CPU limits utilization"
+    
+    # Memory Usage
+    memory_usage_bytes:
+      query: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) by (pod, namespace)
+      description: "Memory usage in bytes per pod"
+      
+    memory_usage_percentage:
+      query: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) 
+        / 
+        sum(container_spec_memory_limit_bytes{pod=~"app-.*"}) * 100
+      description: "Memory usage percentage"
+      
+    memory_requests_utilization:
+      query: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) 
+        / 
+        sum(kube_pod_container_resource_requests{pod=~"app-.*",resource="memory"}) * 100
+      description: "Memory requests utilization"
+      
+    memory_limits_utilization:
+      query: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) 
+        / 
+        sum(kube_pod_container_resource_limits{pod=~"app-.*",resource="memory"}) * 100
+      description: "Memory limits utilization"
+    
+    # Pod Status
+    pod_count:
+      query: |
+        count(kube_pod_info{pod=~"app-.*"}) by (namespace, phase)
+      description: "Pod count by phase"
+      
+    pod_restarts:
+      query: |
+        sum(increase(kube_pod_container_status_restarts_total{pod=~"app-.*"}[1h])) by (pod, namespace)
+      description: "Pod restarts in last hour"
+  
+  # Deployment Metrics
+  deployment:
+    # Deployment Status
+    deployment_ready:
+      query: |
+        kube_deployment_status_ready{deployment=~"app.*"}
+      description: "Number of ready replicas"
+      
+    deployment_desired:
+      query: |
+        kube_deployment_spec_replicas{deployment=~"app.*"}
+      description: "Desired number of replicas"
+      
+    deployment_available:
+      query: |
+        kube_deployment_status_replicas_available{deployment=~"app.*"}
+      description: "Available replicas"
+      
+    deployment_unavailable:
+      query: |
+        kube_deployment_spec_replicas{deployment=~"app.*"} 
+        - 
+        kube_deployment_status_replicas_available{deployment=~"app.*"}
+      description: "Unavailable replicas"
+    
+    # HPA Metrics
+    hpa_current_replicas:
+      query: |
+        kube_horizontalpodautoscaler_status_current_replicas{hpa=~"app.*"}
+      description: "Current HPA replicas"
+      
+    hpa_desired_replicas:
+      query: |
+        kube_horizontalpodautoscaler_status_desired_replicas{hpa=~"app.*"}
+      description: "Desired HPA replicas"
+      
+    hpa_cpu_utilization:
+      query: |
+        kube_horizontalpodautoscaler_status_current_metrics{hpa=~"app.*",metric_name="cpu"}
+      description: "HPA CPU utilization"
+      
+    hpa_memory_utilization:
+      query: |
+        kube_horizontalpodautoscaler_status_current_metrics{hpa=~"app.*",metric_name="memory"}
+      description: "HPA memory utilization"
+  
+  # Canary Deployment Metrics
+  canary:
+    # Traffic Split
+    canary_traffic_percentage:
+      query: |
+        sum(rate(http_requests_total{service="app",track="canary"}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) * 100
+      description: "Canary traffic percentage"
+      
+    stable_traffic_percentage:
+      query: |
+        sum(rate(http_requests_total{service="app",track="stable"}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) * 100
+      description: "Stable traffic percentage"
+    
+    # Canary vs Stable Comparison
+    canary_success_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m]))
+      description: "Canary success rate"
+      
+    stable_success_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",track="stable",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="stable"}[5m]))
+      description: "Stable success rate"
+      
+    canary_error_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m]))
+      description: "Canary error rate"
+      
+    stable_error_rate:
+      query: |
+        sum(rate(http_requests_total{service="app",track="stable",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="stable"}[5m]))
+      description: "Stable error rate"
+      
+    canary_latency_p95:
+      query: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app",track="canary"}[5m])) by (le)
+        )
+      description: "Canary P95 latency"
+      
+    stable_latency_p95:
+      query: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app",track="stable"}[5m])) by (le)
+        )
+      description: "Stable P95 latency"

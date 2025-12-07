@@ -1,0 +1,261 @@
+{
+  "dashboard": {
+    "title": "SLO & Error Budget Dashboard",
+    "tags": ["slo", "error-budget", "reliability"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Availability (30-day Rolling)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d]))",
+            "legendFormat": "Availability",
+            "refId": "A"
+          },
+          {
+            "expr": "0.999",
+            "legendFormat": "SLO Target (99.9%)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit",
+            "min": 0.99,
+            "max": 1.0
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 0.999,
+            "colorMode": "line",
+            "lineColor": "green"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Error Budget Consumption",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "(1 - (sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d])))) / 0.001",
+            "legendFormat": "Error Budget Consumed",
+            "refId": "A"
+          },
+          {
+            "expr": "0.5",
+            "legendFormat": "Warning (50%)",
+            "refId": "B"
+          },
+          {
+            "expr": "0.8",
+            "legendFormat": "Critical (80%)",
+            "refId": "C"
+          },
+          {
+            "expr": "0.95",
+            "legendFormat": "Emergency (95%)",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit",
+            "min": 0,
+            "max": 1.0
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 0.5,
+            "colorMode": "area",
+            "fillColor": "yellow",
+            "opacity": 0.2
+          },
+          {
+            "value": 0.8,
+            "colorMode": "area",
+            "fillColor": "orange",
+            "opacity": 0.3
+          },
+          {
+            "value": 0.95,
+            "colorMode": "area",
+            "fillColor": "red",
+            "opacity": 0.4
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Budget Remaining",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "1 - ((1 - (sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d])))) / 0.001)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 0.2, "color": "orange"},
+              {"value": 0.5, "color": "yellow"},
+              {"value": 0.8, "color": "green"}
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Burn Rate (6h)",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+        "targets": [
+          {
+            "expr": "(1 - (sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[6h])) / sum(rate(http_requests_total{service=\"app\"}[6h])))) / 0.001",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "short",
+          "decimals": 2
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 6, "color": "yellow"},
+            {"value": 14.4, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Burn Rate (1h)",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+        "targets": [
+          {
+            "expr": "(1 - (sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[1h])) / sum(rate(http_requests_total{service=\"app\"}[1h])))) / 0.001",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "short",
+          "decimals": 2
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 6, "color": "yellow"},
+            {"value": 14.4, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "Availability by Time Window",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[24h])) / sum(rate(http_requests_total{service=\"app\"}[24h]))",
+            "legendFormat": "24h",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[7d])) / sum(rate(http_requests_total{service=\"app\"}[7d]))",
+            "legendFormat": "7d",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d]))",
+            "legendFormat": "30d",
+            "refId": "C"
+          },
+          {
+            "expr": "0.999",
+            "legendFormat": "SLO Target",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Error Rate Trend",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"4..|5..\"}[5m])) / sum(rate(http_requests_total{service=\"app\"}[5m]))",
+            "legendFormat": "Error Rate",
+            "refId": "A"
+          },
+          {
+            "expr": "0.001",
+            "legendFormat": "SLO Target (0.1%)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Latency SLO Compliance",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"app\"}[5m])) by (le))",
+            "legendFormat": "P95 Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "0.5",
+            "legendFormat": "SLO Target (500ms)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "seconds",
+            "format": "s"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    }
+  }
+}

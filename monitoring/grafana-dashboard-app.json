@@ -1,0 +1,267 @@
+{
+  "dashboard": {
+    "title": "Application Monitoring Dashboard",
+    "tags": ["application", "monitoring", "slo"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\"}[5m])) by (service)",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "req/s",
+            "format": "reqps"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"4..|5..\"}[5m])) / sum(rate(http_requests_total{service=\"app\"}[5m]))",
+            "legendFormat": "Error Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 0,
+            "colorMode": "ok"
+          },
+          {
+            "value": 0.01,
+            "colorMode": "warning"
+          },
+          {
+            "value": 0.05,
+            "colorMode": "critical"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Success Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[5m])) / sum(rate(http_requests_total{service=\"app\"}[5m]))",
+            "legendFormat": "Success Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percentunit"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 0.99,
+            "colorMode": "critical"
+          },
+          {
+            "value": 0.995,
+            "colorMode": "warning"
+          },
+          {
+            "value": 0.999,
+            "colorMode": "ok"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "P95 Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"app\"}[5m])) by (le))",
+            "legendFormat": "P95 Latency",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "seconds",
+            "format": "s"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 0,
+            "colorMode": "ok"
+          },
+          {
+            "value": 0.5,
+            "colorMode": "warning"
+          },
+          {
+            "value": 1.0,
+            "colorMode": "critical"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Latency Percentiles",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{service=\"app\"}[5m])) by (le))",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"app\"}[5m])) by (le))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{service=\"app\"}[5m])) by (le))",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "seconds",
+            "format": "s"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"app-.*\"}[5m])) by (pod) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "percentage",
+            "format": "percent"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(container_memory_usage_bytes{pod=~\"app-.*\"}) by (pod) / 1024 / 1024",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "MB",
+            "format": "mbytes"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Availability (30-day)",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "percentunit",
+          "decimals": 3
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 0.99, "color": "yellow"},
+            {"value": 0.999, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "title": "Error Budget Remaining",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 32},
+        "targets": [
+          {
+            "expr": "1 - ((1 - (sum(rate(http_requests_total{service=\"app\",status=~\"2..|3..\"}[30d])) / sum(rate(http_requests_total{service=\"app\"}[30d])))) / 0.001)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "percentunit",
+          "decimals": 2
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 0.5, "color": "yellow"},
+            {"value": 0.8, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 10,
+        "title": "Pod Status",
+        "type": "stat",
+        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 32},
+        "targets": [
+          {
+            "expr": "count(kube_pod_info{pod=~\"app-.*\"})",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "unit": "short"
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    }
+  }
+}

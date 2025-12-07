@@ -1,0 +1,355 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: comprehensive-alerts
+  namespace: monitoring
+  labels:
+    app: app
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  # Application Health Alerts
+  - name: application.health
+    interval: 30s
+    rules:
+    - alert: HighErrorRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+        runbook_url: "https://runbooks.example.com/high-error-rate"
+    
+    - alert: CriticalErrorRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) > 0.10
+      for: 2m
+      labels:
+        severity: critical
+        component: application
+      annotations:
+        summary: "Critical error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+        runbook_url: "https://runbooks.example.com/critical-error-rate"
+    
+    - alert: LowSuccessRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) < 0.95
+      for: 5m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "Low success rate detected"
+        description: "Success rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+    
+    - alert: VeryLowSuccessRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) < 0.90
+      for: 2m
+      labels:
+        severity: critical
+        component: application
+      annotations:
+        summary: "Very low success rate detected"
+        description: "Success rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+    
+    - alert: HighLatency
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+        ) > 1.0
+      for: 5m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "High latency detected"
+        description: "P95 latency is {{ $value }}s for service {{ $labels.service }}"
+    
+    - alert: VeryHighLatency
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+        ) > 2.0
+      for: 2m
+      labels:
+        severity: critical
+        component: application
+      annotations:
+        summary: "Very high latency detected"
+        description: "P95 latency is {{ $value }}s for service {{ $labels.service }}"
+    
+    - alert: LowThroughput
+      expr: |
+        sum(rate(http_requests_total{service="app"}[5m])) < 10
+      for: 10m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "Low throughput detected"
+        description: "Throughput is {{ $value }} req/s for service {{ $labels.service }}"
+  
+  # Resource Alerts
+  - name: resources
+    interval: 30s
+    rules:
+    - alert: HighCPUUsage
+      expr: |
+        sum(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) 
+        / 
+        sum(kube_pod_container_resource_limits{pod=~"app-.*",resource="cpu"}) > 0.80
+      for: 5m
+      labels:
+        severity: warning
+        component: resources
+      annotations:
+        summary: "High CPU usage"
+        description: "CPU usage is {{ $value | humanizePercentage }} for pods"
+    
+    - alert: CriticalCPUUsage
+      expr: |
+        sum(rate(container_cpu_usage_seconds_total{pod=~"app-.*"}[5m])) 
+        / 
+        sum(kube_pod_container_resource_limits{pod=~"app-.*",resource="cpu"}) > 0.95
+      for: 2m
+      labels:
+        severity: critical
+        component: resources
+      annotations:
+        summary: "Critical CPU usage"
+        description: "CPU usage is {{ $value | humanizePercentage }} for pods"
+    
+    - alert: HighMemoryUsage
+      expr: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) 
+        / 
+        sum(container_spec_memory_limit_bytes{pod=~"app-.*"}) > 0.80
+      for: 5m
+      labels:
+        severity: warning
+        component: resources
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is {{ $value | humanizePercentage }} for pods"
+    
+    - alert: CriticalMemoryUsage
+      expr: |
+        sum(container_memory_usage_bytes{pod=~"app-.*"}) 
+        / 
+        sum(container_spec_memory_limit_bytes{pod=~"app-.*"}) > 0.95
+      for: 2m
+      labels:
+        severity: critical
+        component: resources
+      annotations:
+        summary: "Critical memory usage"
+        description: "Memory usage is {{ $value | humanizePercentage }} for pods"
+    
+    - alert: PodRestarting
+      expr: |
+        increase(kube_pod_container_status_restarts_total{pod=~"app-.*"}[1h]) > 3
+      for: 5m
+      labels:
+        severity: warning
+        component: resources
+      annotations:
+        summary: "Pod restarting frequently"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+    
+    - alert: PodCrashLooping
+      expr: |
+        kube_pod_container_status_waiting_reason{pod=~"app-.*",reason="CrashLoopBackOff"} > 0
+      for: 5m
+      labels:
+        severity: critical
+        component: resources
+      annotations:
+        summary: "Pod in crash loop"
+        description: "Pod {{ $labels.pod }} is in CrashLoopBackOff state"
+  
+  # Deployment Alerts
+  - name: deployment
+    interval: 30s
+    rules:
+    - alert: DeploymentNotReady
+      expr: |
+        kube_deployment_spec_replicas{deployment=~"app.*"} 
+        - 
+        kube_deployment_status_replicas_ready{deployment=~"app.*"} > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: deployment
+      annotations:
+        summary: "Deployment not ready"
+        description: "Deployment {{ $labels.deployment }} has {{ $value }} unavailable replicas"
+    
+    - alert: DeploymentManyUnavailable
+      expr: |
+        (kube_deployment_spec_replicas{deployment=~"app.*"} 
+         - 
+         kube_deployment_status_replicas_ready{deployment=~"app.*"}) 
+        / 
+        kube_deployment_spec_replicas{deployment=~"app.*"} > 0.5
+      for: 2m
+      labels:
+        severity: critical
+        component: deployment
+      annotations:
+        summary: "Many deployment replicas unavailable"
+        description: "{{ $value | humanizePercentage }} of deployment {{ $labels.deployment }} replicas are unavailable"
+    
+    - alert: HPAAtMaxReplicas
+      expr: |
+        kube_horizontalpodautoscaler_status_current_replicas{hpa=~"app.*"} 
+        >= 
+        kube_horizontalpodautoscaler_spec_max_replicas{hpa=~"app.*"}
+      for: 10m
+      labels:
+        severity: warning
+        component: deployment
+      annotations:
+        summary: "HPA at max replicas"
+        description: "HPA {{ $labels.hpa }} is at maximum replicas ({{ $value }})"
+    
+    - alert: HPAAtMinReplicas
+      expr: |
+        kube_horizontalpodautoscaler_status_current_replicas{hpa=~"app.*"} 
+        <= 
+        kube_horizontalpodautoscaler_spec_min_replicas{hpa=~"app.*"}
+      for: 30m
+      labels:
+        severity: info
+        component: deployment
+      annotations:
+        summary: "HPA at min replicas"
+        description: "HPA {{ $labels.hpa }} is at minimum replicas ({{ $value }})"
+  
+  # Canary Deployment Alerts
+  - name: canary
+    interval: 30s
+    rules:
+    - alert: CanaryHighErrorRate
+      expr: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"4..|5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m])) > 0.10
+      for: 2m
+      labels:
+        severity: critical
+        component: canary
+      annotations:
+        summary: "Canary has high error rate"
+        description: "Canary error rate is {{ $value | humanizePercentage }}"
+    
+    - alert: CanaryLowSuccessRate
+      expr: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"2..|3.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m])) < 0.90
+      for: 2m
+      labels:
+        severity: critical
+        component: canary
+      annotations:
+        summary: "Canary has low success rate"
+        description: "Canary success rate is {{ $value | humanizePercentage }}"
+    
+    - alert: CanaryLatencySpike
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app",track="canary"}[5m])) by (le)
+        ) > 1.5
+      for: 3m
+      labels:
+        severity: warning
+        component: canary
+      annotations:
+        summary: "Canary latency spike"
+        description: "Canary P95 latency is {{ $value }}s"
+  
+  # SLO Alerts (already in prometheusrule-slo.yaml but included for completeness)
+  - name: slo
+    interval: 5m
+    rules:
+    - alert: AvailabilitySLOBreach
+      expr: |
+        (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[30d]))
+        ) < 0.999
+      for: 5m
+      labels:
+        severity: critical
+        component: slo
+      annotations:
+        summary: "Availability SLO breach"
+        description: "30-day availability is {{ $value | humanizePercentage }} (target: 99.9%)"
+    
+    - alert: ErrorBudgetWarning
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.50
+      for: 5m
+      labels:
+        severity: warning
+        component: error-budget
+      annotations:
+        summary: "Error budget 50% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+    
+    - alert: ErrorBudgetCritical
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.80
+      for: 5m
+      labels:
+        severity: critical
+        component: error-budget
+      annotations:
+        summary: "Error budget 80% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+    
+    - alert: ErrorBudgetEmergency
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.95
+      for: 5m
+      labels:
+        severity: critical
+        component: error-budget
+      annotations:
+        summary: "Error budget 95% consumed - EMERGENCY"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}"
+        action: "Freeze all deployments immediately"
