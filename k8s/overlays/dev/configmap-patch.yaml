@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  app.properties: |
+    server.port=8080
+    logging.level.root=DEBUG
+    debug.enabled=true
+  environment.properties: |
+    feature.flags.enabled=true
+    feature.experimental.enabled=true

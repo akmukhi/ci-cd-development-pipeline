@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  app.properties: |
+    server.port=8080
+    logging.level.root=WARN
+    debug.enabled=false
+    production.mode=true
+  environment.properties: |
+    feature.flags.enabled=false
+    feature.experimental.enabled=false
+    monitoring.enabled=true
+    metrics.enabled=true

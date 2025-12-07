@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  app.properties: |
+    server.port=8080
+    logging.level.root=INFO
+    debug.enabled=false
+    canary.enabled=true
+  environment.properties: |
+    feature.flags.enabled=true
+    feature.experimental.enabled=false
+    canary.traffic.percentage=10

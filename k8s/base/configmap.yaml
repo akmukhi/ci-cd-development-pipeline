@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  labels:
+    app: app
+data:
+  app.properties: |
+    # Application configuration
+    server.port=8080
+    logging.level.root=INFO
+  environment.properties: |
+    # Environment-specific settings
+    feature.flags.enabled=false
