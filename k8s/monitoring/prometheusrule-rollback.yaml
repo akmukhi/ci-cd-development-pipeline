@@ -1,0 +1,130 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rollback-triggers
+  namespace: monitoring
+  labels:
+    app: error-budget-monitor
+    prometheus: kube-prometheus
+    role: rollback-alerts
+spec:
+  groups:
+  - name: rollback.triggers
+    interval: 1m
+    rules:
+    # Trigger rollback on emergency error budget consumption
+    - alert: TriggerEmergencyRollback
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.95
+      for: 1m
+      labels:
+        severity: critical
+        component: rollback-trigger
+        action: rollback
+        threshold: emergency
+      annotations:
+        summary: "Emergency rollback triggered - Error budget 95% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}. Automatic rollback will be initiated."
+        runbook_url: "https://runbooks.example.com/emergency-rollback"
+    
+    # Trigger rollback on critical error budget consumption
+    - alert: TriggerCriticalRollback
+      expr: |
+        (
+          1 - (
+            sum(rate(http_requests_total{service="app",status=~"2..|3.."}[30d])) 
+            / 
+            sum(rate(http_requests_total{service="app"}[30d]))
+          )
+        ) / 0.001 > 0.80
+      for: 1m
+      labels:
+        severity: critical
+        component: rollback-trigger
+        action: rollback
+        threshold: critical
+      annotations:
+        summary: "Critical rollback triggered - Error budget 80% consumed"
+        description: "Error budget consumption: {{ $value | humanizePercentage }}. Automatic rollback will be initiated if enabled."
+        runbook_url: "https://runbooks.example.com/critical-rollback"
+    
+    # Rollback on severe availability drop
+    - alert: TriggerRollbackAvailability
+      expr: |
+        (
+          sum(rate(http_requests_total{service="app",status=~"2..|3.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[5m]))
+        ) < 0.99
+      for: 5m
+      labels:
+        severity: critical
+        component: rollback-trigger
+        action: rollback
+        trigger: availability
+      annotations:
+        summary: "Rollback triggered - Availability below 99%"
+        description: "Current availability: {{ $value | humanizePercentage }} (threshold: 99%)"
+    
+    # Rollback on high error rate
+    - alert: TriggerRollbackErrorRate
+      expr: |
+        (
+          sum(rate(http_requests_total{service="app",status=~"4..|5.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app"}[5m]))
+        ) > 0.01
+      for: 5m
+      labels:
+        severity: critical
+        component: rollback-trigger
+        action: rollback
+        trigger: error-rate
+      annotations:
+        summary: "Rollback triggered - Error rate above 1%"
+        description: "Current error rate: {{ $value | humanizePercentage }} (threshold: 1%)"
+  
+  - name: rollback.status
+    interval: 1m
+    rules:
+    # Rollback in progress
+    - alert: RollbackInProgress
+      expr: |
+        increase(rollback_operations_total{status="in_progress"}[5m]) > 0
+      for: 1m
+      labels:
+        severity: info
+        component: rollback-status
+      annotations:
+        summary: "Rollback operation in progress"
+        description: "A rollback operation is currently being executed."
+    
+    # Rollback completed successfully
+    - alert: RollbackCompleted
+      expr: |
+        increase(rollback_operations_total{status="completed"}[5m]) > 0
+      for: 1m
+      labels:
+        severity: info
+        component: rollback-status
+      annotations:
+        summary: "Rollback completed successfully"
+        description: "The rollback operation has completed successfully."
+    
+    # Rollback failed
+    - alert: RollbackFailed
+      expr: |
+        increase(rollback_operations_total{status="failed"}[5m]) > 0
+      for: 1m
+      labels:
+        severity: critical
+        component: rollback-status
+      annotations:
+        summary: "Rollback operation failed"
+        description: "The rollback operation has failed. Manual intervention may be required."

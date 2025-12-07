@@ -1,0 +1,167 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: error-budget-rollback-monitor
+  namespace: monitoring
+  labels:
+    app: error-budget-monitor
+    component: rollback-automation
+spec:
+  # Run every 5 minutes
+  schedule: "*/5 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: error-budget-monitor
+        spec:
+          serviceAccountName: error-budget-monitor
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Install required tools
+              apk add --no-cache bash bc jq git argocd
+              
+              # Download and setup scripts
+              # (In production, these should be in a ConfigMap or init container)
+              
+              # Set environment variables from secrets
+              export PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus.monitoring.svc.cluster.local:9090}
+              export SERVICE_NAME=${SERVICE_NAME:-app}
+              export NAMESPACE=${NAMESPACE:-production}
+              export GITOPS_REPO=${GITOPS_REPO}
+              export GITOPS_TOKEN=${GITOPS_TOKEN}
+              export ARGOCD_SERVER=${ARGOCD_SERVER}
+              export ARGOCD_APP_NAME=${ARGOCD_APP_NAME}
+              export ARGOCD_PASSWORD=${ARGOCD_PASSWORD}
+              export SLACK_WEBHOOK=${SLACK_WEBHOOK}
+              export PAGERDUTY_KEY=${PAGERDUTY_KEY}
+              
+              # Run monitoring script
+              /scripts/auto-rollback-on-error-budget.sh
+            env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus.monitoring.svc.cluster.local:9090"
+            - name: SERVICE_NAME
+              value: "app"
+            - name: NAMESPACE
+              value: "production"
+            - name: ROLLBACK_ENABLED
+              value: "true"
+            - name: AUTO_ROLLBACK_CRITICAL
+              value: "true"
+            - name: AUTO_ROLLBACK_EMERGENCY
+              value: "true"
+            - name: REQUIRE_APPROVAL
+              value: "false"
+            - name: DRY_RUN
+              value: "false"
+            - name: GITOPS_REPO
+              valueFrom:
+                secretKeyRef:
+                  name: gitops-credentials
+                  key: repo
+            - name: GITOPS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gitops-credentials
+                  key: token
+            - name: ARGOCD_SERVER
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-credentials
+                  key: server
+            - name: ARGOCD_APP_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-credentials
+                  key: app-name
+            - name: ARGOCD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: argocd-credentials
+                  key: password
+            - name: SLACK_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: notification-credentials
+                  key: slack-webhook
+                  optional: true
+            - name: PAGERDUTY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-credentials
+                  key: pagerduty-key
+                  optional: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+          initContainers:
+          - name: download-scripts
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Download scripts from repository or ConfigMap
+              # This is a placeholder - in production, use ConfigMap or init container
+              echo "Scripts should be mounted via ConfigMap"
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: rollback-scripts
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: error-budget-monitor
+  namespace: monitoring
+  labels:
+    app: error-budget-monitor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: error-budget-monitor
+  namespace: monitoring
+  labels:
+    app: error-budget-monitor
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: error-budget-monitor
+  namespace: monitoring
+  labels:
+    app: error-budget-monitor
+subjects:
+- kind: ServiceAccount
+  name: error-budget-monitor
+  namespace: monitoring
+roleRef:
+  kind: Role
+  name: error-budget-monitor
+  apiGroup: rbac.authorization.k8s.io

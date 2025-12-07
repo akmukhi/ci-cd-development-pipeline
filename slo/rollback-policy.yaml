@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rollback-policy
+  namespace: monitoring
+  labels:
+    app: slo-monitoring
+data:
+  policy.yaml: |
+    # Rollback Policy Configuration
+    # Defines when and how to perform automated rollbacks
+    
+    rollback_policy:
+      service: app
+      
+      # Enable/Disable rollback automation
+      enabled: true
+      
+      # Rollback triggers
+      triggers:
+        # Error budget thresholds
+        error_budget:
+          warning_threshold: 0.50    # Monitor only, no rollback
+          critical_threshold: 0.80   # Auto-rollback if enabled
+          emergency_threshold: 0.95  # Immediate auto-rollback
+          
+          # Auto-rollback settings
+          auto_rollback_critical: true
+          auto_rollback_emergency: true
+          require_approval: false    # Require manual approval before rollback
+          
+        # SLO violations
+        slo_violations:
+          # Rollback if availability drops below threshold
+          availability:
+            enabled: true
+            threshold: 0.99          # 99% (below 99.9% SLO)
+            duration: 5m             # Must be below for 5 minutes
+            
+          # Rollback if error rate exceeds threshold
+          error_rate:
+            enabled: true
+            threshold: 0.01          # 1% error rate
+            duration: 5m
+            
+          # Rollback if latency exceeds threshold
+          latency:
+            enabled: true
+            p95_threshold: 1.0       # 1 second
+            p99_threshold: 2.0       # 2 seconds
+            duration: 5m
+      
+      # Rollback strategy
+      strategy:
+        # Method: gitops, argocd, or both
+        method: both
+        
+        # GitOps rollback
+        gitops:
+          enabled: true
+          repo: "${GITOPS_REPO}"
+          branch: main
+          path: k8s/overlays/prod
+          lookback_hours: 24         # Look back 24 hours for previous commit
+          create_pr: false           # Create PR instead of direct push
+          auto_merge: false
+          
+        # ArgoCD rollback
+        argocd:
+          enabled: true
+          server: "${ARGOCD_SERVER}"
+          app_name: "${ARGOCD_APP_NAME}"
+          auto_sync: true
+          wait_timeout: 300          # Wait 5 minutes for sync
+      
+      # Safety mechanisms
+      safety:
+        # Cooldown period between rollbacks (minutes)
+        cooldown_period: 60
+        
+        # Maximum rollbacks per day
+        max_rollbacks_per_day: 3
+        
+        # Maximum rollbacks per hour
+        max_rollbacks_per_hour: 1
+        
+        # Blackout periods (no rollbacks during these times)
+        blackout_periods:
+          - start: "00:00"
+            end: "06:00"
+            timezone: "UTC"
+            days: ["Saturday", "Sunday"]
+        
+        # Require approval for production
+        require_approval_production: false
+        
+        # Dry run mode (test without actual rollback)
+        dry_run: false
+      
+      # Notification settings
+      notifications:
+        # Channels to notify
+        channels:
+          - slack
+          - pagerduty
+          - email
+        
+        # Notify on
+        notify_on:
+          - threshold_breach
+          - rollback_initiated
+          - rollback_completed
+          - rollback_failed
+          - approval_required
+        
+        # Recipients
+        recipients:
+          slack: "#sre-alerts"
+          email:
+            - oncall@example.com
+            - sre-team@example.com
+          pagerduty: "${PAGERDUTY_SERVICE_KEY}"
+      
+      # Rollback validation
+      validation:
+        # Verify rollback target is healthy
+        verify_target_health: true
+        
+        # Wait for metrics to stabilize after rollback
+        stabilization_period: 5m
+        
+        # Re-rollback if target also fails
+        allow_re_rollback: true
+        max_re_rollbacks: 2
+      
+      # Post-rollback actions
+      post_rollback:
+        # Freeze deployments after rollback
+        freeze_deployments: true
+        freeze_duration: 24h
+        
+        # Create incident ticket
+        create_incident: true
+        incident_system: "jira"  # or "pagerduty", "servicenow"
+        
+        # Schedule post-mortem
+        schedule_postmortem: true
+        postmortem_delay: 48h
