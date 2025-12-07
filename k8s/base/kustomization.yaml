@@ -5,7 +5,9 @@ namespace: default
 
 resources:
   - deployment.yaml
+  - rollout.yaml
   - service.yaml
+  - service-canary.yaml
   - configmap.yaml
   - secret.yaml
   - hpa.yaml
@@ -13,6 +15,10 @@ resources:
   - pdb.yaml
   - networkpolicy.yaml
   - serviceaccount.yaml
+  - virtualservice.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+  - analysis-template.yaml
 
 commonLabels:
   app: app

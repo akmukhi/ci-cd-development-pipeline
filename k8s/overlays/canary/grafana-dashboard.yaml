@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canary-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  canary-deployment.json: |
+    {
+      "dashboard": {
+        "title": "Canary Deployment Monitoring",
+        "tags": ["canary", "deployment", "rollout"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Rate - Canary vs Stable",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"canary\"}[5m]))",
+                "legendFormat": "Canary"
+              },
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"stable\"}[5m]))",
+                "legendFormat": "Stable"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Error Rate Comparison",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"canary\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{service=\"app\",track=\"canary\"}[5m]))",
+                "legendFormat": "Canary Error Rate"
+              },
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"stable\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{service=\"app\",track=\"stable\"}[5m]))",
+                "legendFormat": "Stable Error Rate"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "P95 Latency Comparison",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"app\",track=\"canary\"}[5m])) by (le))",
+                "legendFormat": "Canary P95"
+              },
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"app\",track=\"stable\"}[5m])) by (le))",
+                "legendFormat": "Stable P95"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Traffic Split Percentage",
+            "type": "gauge",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+            "targets": [
+              {
+                "expr": "(sum(rate(http_requests_total{service=\"app\",track=\"canary\"}[5m])) / sum(rate(http_requests_total{service=\"app\"}[5m]))) * 100",
+                "legendFormat": "Canary Traffic %"
+              }
+            ],
+            "gauge": {
+              "min": 0,
+              "max": 100,
+              "thresholds": [
+                {"value": 0, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 50, "color": "orange"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          },
+          {
+            "id": 5,
+            "title": "Success Rate Comparison",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"canary\",status=~\"2..\"}[5m])) / sum(rate(http_requests_total{service=\"app\",track=\"canary\"}[5m]))",
+                "legendFormat": "Canary Success Rate"
+              },
+              {
+                "expr": "sum(rate(http_requests_total{service=\"app\",track=\"stable\",status=~\"2..\"}[5m])) / sum(rate(http_requests_total{service=\"app\",track=\"stable\"}[5m]))",
+                "legendFormat": "Stable Success Rate"
+              }
+            ]
+          }
+        ]
+      }
+    }

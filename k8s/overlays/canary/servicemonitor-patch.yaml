@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: app
+spec:
+  selector:
+    matchLabels:
+      app: app
+      track: canary
+  endpoints:
+  - port: http
+    interval: 15s  # More frequent scraping for canary
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_label_track]
+      targetLabel: track
+    - sourceLabels: [__meta_kubernetes_pod_label_version]
+      targetLabel: version

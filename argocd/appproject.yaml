@@ -1,23 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: app-project
+  name: default
   namespace: argocd
-  labels:
-    app.kubernetes.io/name: app-project
-    app.kubernetes.io/part-of: argocd
 spec:
-  description: Application project for CI/CD pipeline
+  description: Default project for application deployments
   sourceRepos:
     - '*'
   destinations:
+    - namespace: '*'
+      server: https://kubernetes.default.svc
     - namespace: dev
       server: https://kubernetes.default.svc
     - namespace: staging
       server: https://kubernetes.default.svc
     - namespace: production
-      server: https://kubernetes.default.svc
-    - namespace: '*'
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: '*'
@@ -29,29 +26,14 @@ spec:
     - name: admin
       description: Admin role with full access
       policies:
-        - p, proj:app-project:admin, applications, *, app-project/*, allow
-        - p, proj:app-project:admin, repositories, get, app-project/*, allow
-        - p, proj:app-project:admin, repositories, create, app-project/*, allow
-        - p, proj:app-project:admin, repositories, update, app-project/*, allow
-        - p, proj:app-project:admin, repositories, delete, app-project/*, allow
+        - p, proj:default:admin, applications, *, default/*, allow
+        - p, proj:default:admin, repositories, *, default/*, allow
       groups:
         - admin
     - name: developer
       description: Developer role with limited access
       policies:
-        - p, proj:app-project:developer, applications, get, app-project/*, allow
-        - p, proj:app-project:developer, applications, sync, app-project/*, allow
+        - p, proj:default:developer, applications, get, default/*, allow
+        - p, proj:default:developer, applications, sync, default/*, allow
       groups:
         - developers
-  syncWindows:
-    - kind: allow
-      schedule: '* * * * *'
-      duration: 24h
-      applications:
-        - '*'
-    - kind: deny
-      schedule: '0 2 * * *'
-      duration: 1h
-      applications:
-        - '*-prod'
-      manualSync: true

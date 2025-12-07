@@ -1,0 +1,86 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: comprehensive-canary-analysis
+  labels:
+    app: app
+    environment: canary
+spec:
+  metrics:
+  # Success Rate Metric
+  - name: success-rate
+    interval: 30s
+    successCondition: result[0] >= 0.95
+    failureCondition: result[0] < 0.90
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="app",track="canary",status=~"2.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app",track="canary"}[5m]))
+  
+  # Error Rate Metric
+  - name: error-rate
+    interval: 30s
+    successCondition: result[0] <= 0.05
+    failureCondition: result[0] > 0.10
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="app",track="canary",status=~"5.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{service="app",track="canary"}[5m]))
+  
+  # P95 Latency Metric
+  - name: latency-p95
+    interval: 30s
+    successCondition: result[0] <= 500
+    failureCondition: result[0] > 1000
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          histogram_quantile(0.95, 
+            sum(rate(http_request_duration_seconds_bucket{service="app",track="canary"}[5m])) by (le)
+          ) * 1000
+  
+  # Request Volume Metric
+  - name: request-volume
+    interval: 30s
+    successCondition: result[0] >= 10
+    failureCondition: result[0] < 5
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="app",track="canary"}[1m]))
+  
+  # CPU Usage Metric
+  - name: cpu-usage
+    interval: 30s
+    successCondition: result[0] <= 80
+    failureCondition: result[0] > 90
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          avg(rate(container_cpu_usage_seconds_total{pod=~"canary-app.*"}[5m])) * 100
+  
+  # Memory Usage Metric
+  - name: memory-usage
+    interval: 30s
+    successCondition: result[0] <= 80
+    failureCondition: result[0] > 90
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          avg(container_memory_usage_bytes{pod=~"canary-app.*"}) / 
+          avg(container_spec_memory_limit_bytes{pod=~"canary-app.*"}) * 100

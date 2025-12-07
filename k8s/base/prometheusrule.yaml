@@ -1,0 +1,62 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: app-alerts
+  labels:
+    app: app
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: app.rules
+    interval: 30s
+    rules:
+    - alert: HighErrorRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: app
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is above 5% for service {{ $labels.service }}"
+    
+    - alert: HighLatency
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app"}[5m])) by (le)
+        ) > 1
+      for: 5m
+      labels:
+        severity: warning
+        component: app
+      annotations:
+        summary: "High latency detected"
+        description: "P95 latency is above 1s for service {{ $labels.service }}"
+    
+    - alert: LowSuccessRate
+      expr: |
+        sum(rate(http_requests_total{service="app",status=~"2.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app"}[5m])) < 0.95
+      for: 5m
+      labels:
+        severity: critical
+        component: app
+      annotations:
+        summary: "Low success rate detected"
+        description: "Success rate is below 95% for service {{ $labels.service }}"
+    
+    - alert: CanaryDeploymentFailure
+      expr: |
+        argocd_app_info{name=~"app-canary.*",health_status="Degraded"} == 1
+      for: 2m
+      labels:
+        severity: critical
+        component: canary
+      annotations:
+        summary: "Canary deployment is failing"
+        description: "Canary deployment {{ $labels.name }} is in Degraded state"

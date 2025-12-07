@@ -3,19 +3,17 @@ kind: Application
 metadata:
   name: app-dev
   namespace: argocd
-  labels:
-    app: app
-    environment: dev
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+  labels:
+    app: app
+    environment: development
 spec:
-  project: app-project
+  project: default
   source:
-    repoURL: https://github.com/OWNER/REPO.git
+    repoURL: https://github.com/OWNER/ci-cd-development-pipeline
     targetRevision: main
     path: k8s/overlays/dev
-    kustomize:
-      buildOptions: "--enable-helm"
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
@@ -35,13 +33,3 @@ spec:
         factor: 2
         maxDuration: 3m
   revisionHistoryLimit: 10
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      jsonPointers:
-        - /spec/replicas
-    - group: autoscaling
-      kind: HorizontalPodAutoscaler
-      jsonPointers:
-        - /spec/minReplicas
-        - /spec/maxReplicas

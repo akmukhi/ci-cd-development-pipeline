@@ -3,19 +3,17 @@ kind: Application
 metadata:
   name: app-canary
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   labels:
     app: app
     environment: canary
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
-  project: app-project
+  project: default
   source:
-    repoURL: https://github.com/OWNER/REPO.git
+    repoURL: https://github.com/OWNER/ci-cd-development-pipeline
     targetRevision: main
     path: k8s/overlays/canary
-    kustomize:
-      buildOptions: "--enable-helm"
   destination:
     server: https://kubernetes.default.svc
     namespace: production
@@ -36,12 +34,7 @@ spec:
         maxDuration: 3m
   revisionHistoryLimit: 10
   ignoreDifferences:
-    - group: apps
-      kind: Deployment
+    - group: argoproj.io
+      kind: Rollout
       jsonPointers:
-        - /spec/replicas
-    - group: autoscaling
-      kind: HorizontalPodAutoscaler
-      jsonPointers:
-        - /spec/minReplicas
-        - /spec/maxReplicas
+        - /status

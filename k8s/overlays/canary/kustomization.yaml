@@ -14,10 +14,18 @@ replicas:
     count: 1
 
 patchesStrategicMerge:
+  - rollout-patch.yaml
   - deployment-patch.yaml
   - configmap-patch.yaml
   - service-patch.yaml
   - ingress-patch.yaml
+  - virtualservice-patch.yaml
+  - analysis-template-patch.yaml
+  - servicemonitor-patch.yaml
+  - prometheusrule-patch.yaml
+
+resources:
+  - grafana-dashboard.yaml
 
 configMapGenerator:
   - name: app-config

@@ -1,0 +1,100 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: app
+  labels:
+    app: app
+    version: v1
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      serviceAccountName: app
+      containers:
+      - name: app
+        image: ghcr.io/OWNER/REPO:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "base"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        fsGroup: 1000
+  strategy:
+    canary:
+      steps:
+      - setWeight: 10
+      - pause: {}
+      - setWeight: 25
+      - pause: {duration: 5m}
+      - setWeight: 50
+      - pause: {duration: 5m}
+      - setWeight: 75
+      - pause: {duration: 5m}
+      - setWeight: 100
+      - pause: {duration: 10m}
+      canaryService: app-canary
+      stableService: app
+      trafficRouting:
+        istio:
+          virtualService:
+            name: app
+            routes:
+            - primary
+          destinationRule:
+            name: app
+            canarySubsetName: canary
+            stableSubsetName: stable
+      analysis:
+        templates:
+        - templateName: success-rate
+        - templateName: error-rate
+        - templateName: latency
+        args:
+        - name: service-name
+          value: app
+        startingStep: 2
+        interval: 30s

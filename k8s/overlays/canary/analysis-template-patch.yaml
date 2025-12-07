@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: request-volume
+  labels:
+    app: app
+spec:
+  metrics:
+  - name: request-volume
+    interval: 30s
+    successCondition: result[0] >= 10
+    failureCondition: result[0] < 5
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="app"}[1m]))

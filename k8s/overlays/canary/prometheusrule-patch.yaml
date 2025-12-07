@@ -1,0 +1,64 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: app-canary-alerts
+spec:
+  groups:
+  - name: canary.rules
+    interval: 30s
+    rules:
+    - alert: CanaryHighErrorRate
+      expr: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"5.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m])) > 0.10
+      for: 2m
+      labels:
+        severity: critical
+        component: canary
+        environment: canary
+      annotations:
+        summary: "Canary deployment has high error rate"
+        description: "Canary error rate is above 10% ({{ $value | humanizePercentage }})"
+    
+    - alert: CanaryLowSuccessRate
+      expr: |
+        sum(rate(http_requests_total{service="app",track="canary",status=~"2.."}[5m])) 
+        / 
+        sum(rate(http_requests_total{service="app",track="canary"}[5m])) < 0.90
+      for: 2m
+      labels:
+        severity: critical
+        component: canary
+        environment: canary
+      annotations:
+        summary: "Canary deployment has low success rate"
+        description: "Canary success rate is below 90% ({{ $value | humanizePercentage }})"
+    
+    - alert: CanaryLatencySpike
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(http_request_duration_seconds_bucket{service="app",track="canary"}[5m])) by (le)
+        ) > 1.5
+      for: 3m
+      labels:
+        severity: warning
+        component: canary
+        environment: canary
+      annotations:
+        summary: "Canary deployment experiencing high latency"
+        description: "Canary P95 latency is {{ $value }}s (threshold: 1.5s)"
+    
+    - alert: CanaryTrafficImbalance
+      expr: |
+        (sum(rate(http_requests_total{service="app",track="canary"}[5m])) 
+         / 
+         sum(rate(http_requests_total{service="app"}[5m]))) > 0.15
+      for: 5m
+      labels:
+        severity: info
+        component: canary
+        environment: canary
+      annotations:
+        summary: "Canary traffic exceeds expected percentage"
+        description: "Canary is receiving {{ $value | humanizePercentage }} of traffic (expected: 10%)"
