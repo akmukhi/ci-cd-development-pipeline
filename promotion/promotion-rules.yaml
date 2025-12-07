@@ -1,0 +1,328 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promotion-rules
+  namespace: default
+  labels:
+    app: promotion-automation
+data:
+  rules.yaml: |
+    # Environment Promotion Rules Configuration
+    # Defines conditions and requirements for promoting between environments
+    
+    promotion_rules:
+      # Environment definitions
+      environments:
+        - name: dev
+          namespace: dev
+          path: k8s/overlays/dev
+          argocd_app: app-dev
+          order: 1
+          
+        - name: staging
+          namespace: staging
+          path: k8s/overlays/staging
+          argocd_app: app-staging
+          order: 2
+          
+        - name: canary
+          namespace: production
+          path: k8s/overlays/canary
+          argocd_app: app-canary
+          order: 3
+          
+        - name: production
+          namespace: production
+          path: k8s/overlays/prod
+          argocd_app: app-prod
+          order: 4
+      
+      # Promotion paths
+      promotion_paths:
+        - from: dev
+          to: staging
+          enabled: true
+          auto_promote: false
+          require_approval: false
+          
+        - from: staging
+          to: canary
+          enabled: true
+          auto_promote: false
+          require_approval: true
+          
+        - from: canary
+          to: production
+          enabled: true
+          auto_promote: false
+          require_approval: true
+      
+      # Promotion requirements
+      requirements:
+        # General requirements
+        general:
+          # Minimum time in environment before promotion
+          min_time_in_environment: 24h
+          
+          # Maximum time in environment before auto-promote
+          max_time_in_environment: 7d
+          
+          # Require all tests to pass
+          require_tests: true
+          
+          # Require security scans to pass
+          require_security_scan: true
+          
+          # Require code quality checks
+          require_code_quality: true
+          
+          # Require SLO compliance
+          require_slo_compliance: true
+          
+          # Minimum deployment age before promotion
+          min_deployment_age: 2h
+        
+        # Dev to Staging requirements
+        dev_to_staging:
+          # Test requirements
+          tests:
+            unit_tests: required
+            integration_tests: required
+            e2e_tests: optional
+            
+          # Coverage requirements
+          coverage:
+            min_coverage: 70
+            min_unit_coverage: 80
+            
+          # Security requirements
+          security:
+            max_critical_vulns: 0
+            max_high_vulns: 5
+            max_medium_vulns: 20
+            
+          # Code quality
+          code_quality:
+            max_lint_errors: 0
+            max_complexity: 10
+            
+          # SLO requirements
+          slo:
+            availability_min: 0.99      # 99%
+            error_rate_max: 0.01         # 1%
+            latency_p95_max: 1000       # 1s
+            
+          # Error budget
+          error_budget:
+            max_consumption: 0.50       # 50%
+            
+          # Manual checks
+          manual_checks:
+            smoke_tests: required
+            regression_tests: optional
+        
+        # Staging to Canary requirements
+        staging_to_canary:
+          # Test requirements
+          tests:
+            unit_tests: required
+            integration_tests: required
+            e2e_tests: required
+            performance_tests: required
+            
+          # Coverage requirements
+          coverage:
+            min_coverage: 80
+            min_unit_coverage: 85
+            
+          # Security requirements
+          security:
+            max_critical_vulns: 0
+            max_high_vulns: 0
+            max_medium_vulns: 10
+            
+          # Code quality
+          code_quality:
+            max_lint_errors: 0
+            max_complexity: 8
+            
+          # SLO requirements
+          slo:
+            availability_min: 0.995     # 99.5%
+            error_rate_max: 0.005        # 0.5%
+            latency_p95_max: 800        # 800ms
+            
+          # Error budget
+          error_budget:
+            max_consumption: 0.30        # 30%
+            
+          # Performance requirements
+          performance:
+            p95_latency_max: 800        # 800ms
+            p99_latency_max: 1500       # 1.5s
+            throughput_min: 100          # req/s
+            
+          # Manual checks
+          manual_checks:
+            smoke_tests: required
+            regression_tests: required
+            load_tests: required
+            security_review: required
+        
+        # Canary to Production requirements
+        canary_to_production:
+          # Test requirements
+          tests:
+            unit_tests: required
+            integration_tests: required
+            e2e_tests: required
+            performance_tests: required
+            chaos_tests: optional
+            
+          # Coverage requirements
+          coverage:
+            min_coverage: 85
+            min_unit_coverage: 90
+            
+          # Security requirements
+          security:
+            max_critical_vulns: 0
+            max_high_vulns: 0
+            max_medium_vulns: 5
+            
+          # Code quality
+          code_quality:
+            max_lint_errors: 0
+            max_complexity: 7
+            
+          # SLO requirements
+          slo:
+            availability_min: 0.999     # 99.9%
+            error_rate_max: 0.001       # 0.1%
+            latency_p95_max: 500        # 500ms
+            
+          # Error budget
+          error_budget:
+            max_consumption: 0.20        # 20%
+            
+          # Performance requirements
+          performance:
+            p95_latency_max: 500        # 500ms
+            p99_latency_max: 1000       # 1s
+            throughput_min: 200         # req/s
+            
+          # Canary-specific requirements
+          canary:
+            min_traffic_percentage: 10  # Must have 10% traffic
+            min_duration: 24h            # Must run for 24h
+            success_rate_min: 0.99      # 99% success rate
+            error_rate_max: 0.01        # 1% error rate
+            
+          # Manual checks
+          manual_checks:
+            smoke_tests: required
+            regression_tests: required
+            load_tests: required
+            security_review: required
+            architecture_review: optional
+            business_approval: optional
+      
+      # Promotion gates
+      gates:
+        # Pre-promotion gates
+        pre_promotion:
+          - name: tests_passed
+            type: test
+            required: true
+            
+          - name: security_scan_passed
+            type: security
+            required: true
+            
+          - name: code_quality_passed
+            type: quality
+            required: true
+            
+          - name: slo_compliant
+            type: slo
+            required: true
+            
+          - name: error_budget_ok
+            type: error_budget
+            required: true
+            
+          - name: deployment_stable
+            type: stability
+            required: true
+            min_duration: 2h
+            
+          - name: no_critical_alerts
+            type: alerting
+            required: true
+        
+        # Post-promotion gates
+        post_promotion:
+          - name: deployment_successful
+            type: deployment
+            required: true
+            timeout: 15m
+            
+          - name: health_checks_passing
+            type: health
+            required: true
+            timeout: 10m
+            
+          - name: metrics_stable
+            type: metrics
+            required: true
+            timeout: 5m
+            
+          - name: smoke_tests_passing
+            type: test
+            required: true
+            timeout: 5m
+      
+      # Approval workflow
+      approvals:
+        # Approval requirements by environment
+        dev_to_staging:
+          required: false
+          approvers: []
+          
+        staging_to_canary:
+          required: true
+          approvers:
+            - team: sre-team
+              min_approvals: 1
+            - team: qa-team
+              min_approvals: 1
+              
+        canary_to_production:
+          required: true
+          approvers:
+            - team: sre-team
+              min_approvals: 2
+            - team: engineering-lead
+              min_approvals: 1
+            - role: product-owner
+              min_approvals: 1
+      
+      # Rollback policy
+      rollback:
+        # Auto-rollback on failure
+        auto_rollback_on_failure: true
+        
+        # Rollback triggers
+        triggers:
+          - error_budget_breach
+          - slo_violation
+          - critical_alert
+          - deployment_failure
+          - health_check_failure
+        
+        # Rollback notification
+        notify_on_rollback: true
+        notify_channels:
+          - slack
+          - pagerduty
+          - email

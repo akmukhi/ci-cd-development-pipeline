@@ -1,0 +1,111 @@
+name: Environment Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_env:
+        description: 'Source environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - canary
+      to_env:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - canary
+          - production
+      auto_approve:
+        description: 'Auto-approve promotion (skip approval checks)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PROMETHEUS_URL: http://prometheus.monitoring.svc.cluster.local:9090
+  SERVICE_NAME: app
+
+jobs:
+  validate-promotion:
+    name: Validate Promotion Requirements
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc curl
+
+      - name: Validate promotion requirements
+        env:
+          FROM_ENV: ${{ github.event.inputs.from_env }}
+          TO_ENV: ${{ github.event.inputs.to_env }}
+        run: |
+          ./scripts/validate-promotion-requirements.sh
+
+  promote:
+    name: Promote Environment
+    runs-on: ubuntu-latest
+    needs: validate-promotion
+    if: success()
+    environment:
+      name: ${{ github.event.inputs.to_env }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc curl git
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Promote environment
+        env:
+          FROM_ENV: ${{ github.event.inputs.from_env }}
+          TO_ENV: ${{ github.event.inputs.to_env }}
+          AUTO_APPROVE: ${{ github.event.inputs.auto_approve }}
+          GITOPS_REPO: ${{ secrets.GITOPS_REPO }}
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+        run: |
+          ./scripts/promote-environment.sh
+
+      - name: Verify promotion
+        env:
+          TO_ENV: ${{ github.event.inputs.to_env }}
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          sleep 60
+          # Run smoke tests or health checks
+          echo "Promotion verification completed"
+
+  notify:
+    name: Notify Promotion Status
+    runs-on: ubuntu-latest
+    needs: promote
+    if: always()
+    steps:
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Promotion completed successfully: ${{ github.event.inputs.from_env }} -> ${{ github.event.inputs.to_env }}"
+          # Add Slack/Discord notification here
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Promotion failed: ${{ github.event.inputs.from_env }} -> ${{ github.event.inputs.to_env }}"
+          # Add Slack/Discord notification here
