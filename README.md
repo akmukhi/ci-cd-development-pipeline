@@ -482,6 +482,4 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 - **Issues**: Open a GitHub issue
 - **Questions**: Contact the SRE team
 
----
 
-**Built with ❤️ for reliable, secure, and automated deployments**
